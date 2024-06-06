@@ -1,0 +1,82 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import transforms
+from torch.utils.data import DataLoader, Dataset
+from PIL import Image
+import os
+
+# Define the autoencoder model
+class BinaryImageAutoencoder(nn.Module):
+    def __init__(self):
+        super(BinaryImageAutoencoder, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 16, 3, stride=2, padding=1),  # 3 input channels (RGB), 16 output channels, 3x3 kernel, stride 2, padding 1
+            nn.ReLU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1), 
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(32, 16, 3, stride=2, padding=1, output_padding=1), # Output padding is 1 to match the input size
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 1, 3, stride=2, padding=1, output_padding=1), 
+            nn.Sigmoid()  # Sigmoid activation for binary image reconstruction
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+# Define custom dataset
+class CustomDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.images = os.listdir(root_dir)
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.root_dir, self.images[idx])
+        image = Image.open(img_name)
+        if self.transform:
+            image = self.transform(image)
+        return image
+
+# Define transformations
+transform = transforms.Compose([
+    transforms.Resize((64, 64)),  # Resize images to a fixed size
+    transforms.ToTensor()  # Convert images to tensors
+])
+
+# Create datasets and dataloaders
+normal_dataset = CustomDataset(root_dir='path_to_normal_images_folder', transform=transform)
+
+normal_dataloader = DataLoader(normal_dataset, batch_size=64, shuffle=True)
+
+# Initialize the model
+model = BinaryImageAutoencoder()
+
+# Define loss function and optimizer
+criterion = nn.BCELoss()  # Binary Cross-Entropy Loss for binary images
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Training loop
+num_epochs = 10
+for epoch in range(num_epochs):
+    running_loss = 0.0
+    for i, inputs in enumerate(normal_dataloader):
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, inputs)  # Reconstruction loss using binary cross-entropy
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+
+    epoch_loss = running_loss / len(normal_dataloader)
+    print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.4f}")
+
+print('Training finished')
