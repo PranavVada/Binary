@@ -1,0 +1,85 @@
+import os
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torchvision import transforms
+from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader
+
+# Define the model
+class BinaryImageModel(nn.Module):
+    def __init__(self):
+        super(BinaryImageModel, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
+        self.pool = nn.AdaptiveAvgPool2d((32, 32))  # Adaptive pooling to fixed size
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=1, kernel_size=3, padding=1)
+    
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.pool(x)
+        x = torch.sigmoid(self.conv3(x))  # Output should be between 0 and 1
+        return x
+
+# Define a thresholding function
+def threshold_image(image, threshold=0.5):
+    return (image > threshold).float()
+
+# Main function
+if __name__ == "__main__":
+    # Create a transformation pipeline
+    transform = transforms.Compose([
+        transforms.Resize((128, 128)),  # Resize to a consistent size for simplicity
+        transforms.ToTensor()
+    ])
+
+    # Specify the folder containing images
+    image_folder_path = 'D:/images/'
+
+    # Create a fake subdirectory with a fake class name
+    fake_class_name = 'class1'
+    fake_directory = os.path.join(image_folder_path, fake_class_name)
+    os.makedirs(fake_directory, exist_ok=True)
+
+    # Move all images from the root directory to the fake subdirectory
+    for filename in os.listdir(image_folder_path):
+        if filename.endswith('.jpg') or filename.endswith('.png'):
+            os.rename(os.path.join(image_folder_path, filename), os.path.join(fake_directory, filename))
+
+    # Now, use ImageFolder with the fake class directory
+    dataset = ImageFolder(image_folder_path, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
+
+    # Initialize the model, loss function, and optimizer
+    model = BinaryImageModel()
+    criterion = nn.BCELoss()  # Binary Cross Entropy Loss for binary classification
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # Training loop
+    num_epochs = 5
+    for epoch in range(num_epochs):
+        for inputs, _ in dataloader:  # Assuming dataset returns inputs and labels
+            # Forward pass
+            outputs = model(inputs)
+            
+            # Create binary labels for training purposes
+            binary_labels = threshold_image(inputs.mean(dim=1, keepdim=True))  # Fake labels for demo
+
+            # Resize the target tensors to match the model's output size
+            binary_labels_resized = F.interpolate(binary_labels, size=(32, 32), mode='nearest')
+            
+            # Compute the loss
+            loss = criterion(outputs, binary_labels_resized)
+            
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
+
+    # Save the model
+    torch.save(model.state_dict(), 'binary_image_model.pth')
+    print("Model saved as 'binary_image_model.pth'")
