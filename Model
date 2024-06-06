@@ -1,0 +1,104 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+import torchvision.transforms as transforms
+from torchvision import models
+from PIL import Image
+import os
+
+# Define the binary image model
+class BinaryImageModel(nn.Module):
+    def __init__(self):
+        super(BinaryImageModel, self).__init__()
+        
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+        
+        # Activation function
+        self.activation = nn.ReLU()
+        
+        # Fully connected layer
+        self.fc = nn.Linear(32*56*56, 1)  # Assuming input image size is 224x224
+        
+        # Sigmoid activation for binary classification
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, x):
+        # Forward pass through convolutional layers
+        x = self.activation(self.conv1(x))
+        x = self.activation(self.conv2(x))
+        
+        # Flatten the output for fully connected layer
+        x = x.view(x.size(0), -1)
+        
+        # Fully connected layer
+        x = self.fc(x)
+        
+        # Sigmoid activation for binary classification
+        x = self.sigmoid(x)
+        
+        return x
+
+# Custom dataset class
+class CustomDataset(Dataset):
+    def __init__(self, image_folder, transform=None):
+        self.image_folder = image_folder
+        self.image_paths = os.listdir(image_folder)
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.image_folder, self.image_paths[idx])
+        image = Image.open(img_name).convert('RGB')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        # Assuming binary images are stored in a separate folder with the same name
+        binary_image_name = os.path.join("binary_images", self.image_paths[idx])
+        binary_image = Image.open(binary_image_name).convert('L')  # Convert to grayscale
+        
+        # Convert grayscale binary image to tensor and apply threshold of 0.5
+        binary_image = torch.tensor(binary_image, dtype=torch.float32) / 255.0
+        binary_image = torch.where(binary_image > 0.5, torch.tensor(1.0), torch.tensor(0.0))
+        
+        return image, binary_image
+
+# Define transformations
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+])
+
+# Define paths to your image dataset
+train_image_folder = "train_images"
+
+# Create custom dataset and DataLoader
+train_dataset = CustomDataset(image_folder=train_image_folder, transform=transform)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
+# Initialize the model
+model = BinaryImageModel()
+
+# Define loss function and optimizer
+criterion = nn.BCELoss()  # Binary Cross Entropy Loss
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Training loop
+num_epochs = 10
+for epoch in range(num_epochs):
+    running_loss = 0.0
+    for images, binary_images in train_loader:
+        optimizer.zero_grad()
+        
+        outputs = model(images)
+        loss = criterion(outputs, binary_images)
+        loss.backward()
+        optimizer.step()
+        
+        running_loss += loss.item()
+    print(f"Epoch {epoch+1}, Loss: {running_loss/len(train_loader)}")
