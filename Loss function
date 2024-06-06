@@ -1,0 +1,11 @@
+import torch
+
+# Assuming you have a ground truth binary image (binary_tensor_gt) and predicted binary image (binary_tensor_pred)
+binary_tensor_gt = ...  # Ground truth binary image tensor
+binary_tensor_pred = ...  # Predicted binary image tensor
+
+# Compute Binary Cross Entropy Loss
+criterion = nn.BCELoss()
+loss = criterion(binary_tensor_pred, binary_tensor_gt)
+
+print("Binary Cross Entropy Loss:", loss.item())
