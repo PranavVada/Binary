@@ -1,0 +1,71 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+from PIL import Image
+import matplotlib.pyplot as plt
+
+# Define the model
+class RGB2Gray(nn.Module):
+    def __init__(self):
+        super(RGB2Gray, self).__init__()
+        self.conv = nn.Conv2d(3, 1, kernel_size=1)
+        self.activation = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.activation(x)
+        return x
+
+# Function to convert image to grayscale and binary
+def convert_image_to_grayscale_and_binary(model, image_path, threshold=0.5):
+    # Load image
+    img = Image.open(image_path).convert('RGB')
+    
+    # Define transformation
+    transform = transforms.Compose([
+        transforms.ToTensor()
+    ])
+    
+    # Transform image
+    img_tensor = transform(img).unsqueeze(0)
+    
+    # Pass through the model
+    with torch.no_grad():
+        gray_tensor = model(img_tensor)
+    
+    # Convert grayscale tensor to binary tensor using threshold
+    binary_tensor = (gray_tensor > threshold).float()
+    
+    # Convert tensors back to PIL images
+    gray_image = transforms.ToPILImage()(gray_tensor.squeeze(0))
+    binary_image = transforms.ToPILImage()(binary_tensor.squeeze(0))
+    
+    return img, gray_image, binary_image
+
+# Instantiate and set the model to evaluation mode
+model = RGB2Gray()
+model.eval()
+
+# Example usage with a sample image
+image_path = 'path_to_your_image.jpg'  # Replace with your image path
+original_img, gray_img, binary_img = convert_image_to_grayscale_and_binary(model, image_path)
+
+# Display the images
+plt.figure(figsize=(18, 6))
+
+plt.subplot(1, 3, 1)
+plt.title('Original Image')
+plt.imshow(original_img)
+plt.axis('off')
+
+plt.subplot(1, 3, 2)
+plt.title('Grayscale Image')
+plt.imshow(gray_img, cmap='gray')
+plt.axis('off')
+
+plt.subplot(1, 3, 3)
+plt.title('Binary Image')
+plt.imshow(binary_img, cmap='gray')
+plt.axis('off')
+
+plt.show()
