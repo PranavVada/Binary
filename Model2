@@ -1,0 +1,84 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+import os
+
+# Define the model
+class RGB2Gray(nn.Module):
+    def __init__(self):
+        super(RGB2Gray, self).__init__()
+        self.conv = nn.Conv2d(3, 1, kernel_size=1)
+        self.activation = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.activation(x)
+        return x
+
+# Custom dataset class with ground truth binary images
+class CustomDatasetWithBinary(Dataset):
+    def __init__(self, image_folder, binary_folder, transform=None):
+        self.image_folder = image_folder
+        self.binary_folder = binary_folder
+        self.image_paths = os.listdir(image_folder)
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.image_folder, self.image_paths[idx])
+        image = Image.open(img_name).convert('RGB')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        # Assuming binary images are stored in a separate folder with the same name
+        binary_image_name = os.path.join(self.binary_folder, self.image_paths[idx])
+        binary_image = Image.open(binary_image_name).convert('L')  # Convert to grayscale
+        
+        # Convert binary image to tensor
+        binary_tensor = transforms.ToTensor()(binary_image)
+        
+        return image, binary_tensor
+
+# Instantiate and set the model to evaluation mode
+model = RGB2Gray()
+model.eval()
+
+# Define paths to your image dataset
+train_image_folder = "C:\Users\Pranav\PycharmProjects\opencv-Project\Code\data"
+binary_image_folder = "binary_images"
+
+# Create custom dataset and DataLoader with ground truth binary images
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+])
+train_dataset = CustomDatasetWithBinary(image_folder=train_image_folder, binary_folder=binary_image_folder, transform=transform)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
+# Define loss function
+criterion = nn.BCELoss()
+
+# Training loop
+num_epochs = 10
+for epoch in range(num_epochs):
+    running_loss = 0.0
+    for images, binary_images in train_loader:
+        optimizer.zero_grad()
+        
+        # Pass original image through the model to get predicted binary image
+        outputs = model(images)
+        
+        # Compute loss between predicted binary image and ground truth binary image
+        loss = criterion(outputs, binary_images)
+        
+        # Backpropagation and optimization
+        loss.backward()
+        optimizer.step()
+        
+        running_loss += loss.item()
+    print(f"Epoch {epoch+1}, Loss: {running_loss/len(train_loader)}")
